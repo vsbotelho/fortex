@@ -40,10 +40,34 @@ describe('calcularPiso', () => {
     ).toThrow(CoeficienteNaoEncontradoError);
   });
 
-  it('bloqueia enquanto a tabela oficial não for carregada', () => {
+  it('tabela vigente: granel sólido, 5 eixos, 430 km = 430 × R$ 6,8548 + R$ 664,83', () => {
+    const r = calcularPiso({ tipoCarga: TipoCarga.GRANEL_SOLIDO, eixos: 5, distanciaKm: 430 }, TABELA_VIGENTE);
+    expect(r.valor).toBe(361_240); // R$ 3.612,394 arredondado para cima: R$ 3.612,40
+  });
+
+  it('tabela vigente: granel sólido, 9 eixos, 1.000 km', () => {
+    const r = calcularPiso({ tipoCarga: TipoCarga.GRANEL_SOLIDO, eixos: 9, distanciaKm: 1000 }, TABELA_VIGENTE);
+    expect(r.valor).toBe(943_180 + 90_891);
+  });
+
+  it('tabela vigente: não existe coeficiente para 8 eixos nem para outros tipos de carga', () => {
     expect(() =>
-      calcularPiso({ tipoCarga: TipoCarga.GRANEL_SOLIDO, eixos: 5, distanciaKm: 100 }, TABELA_VIGENTE),
+      calcularPiso({ tipoCarga: TipoCarga.GRANEL_SOLIDO, eixos: 8, distanciaKm: 100 }, TABELA_VIGENTE),
     ).toThrow(CoeficienteNaoEncontradoError);
+    expect(() =>
+      calcularPiso({ tipoCarga: TipoCarga.CARGA_GERAL, eixos: 5, distanciaKm: 100 }, TABELA_VIGENTE),
+    ).toThrow(CoeficienteNaoEncontradoError);
+  });
+
+  it('tabela vigente: toda linha tem coeficientes positivos e sem duplicidade', () => {
+    const chaves = new Set<string>();
+    for (const c of TABELA_VIGENTE.coeficientes) {
+      expect(c.ccdCentavosPorKm).toBeGreaterThan(0);
+      expect(Number.isInteger(c.ccCentavos) && c.ccCentavos > 0).toBe(true);
+      const chave = `${c.tipoCarga}-${c.eixos}`;
+      expect(chaves.has(chave)).toBe(false);
+      chaves.add(chave);
+    }
   });
 
   it('rejeita distância e eixos inválidos', () => {

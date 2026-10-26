@@ -35,7 +35,9 @@ cd apps/mobile && pnpm dev   # app do motorista no Expo
 
 ## Pendências antes de cotar de verdade
 
-- [ ] Preencher `packages/pricing/src/tabela-vigente.ts` com os coeficientes oficiais da Res. ANTT 6.084/2026 (CCD e CC por tipo de carga e eixos) e a data de vigência. Enquanto vazia, a API responde `TABELA_PISO_INDISPONIVEL` e nenhuma cotação é emitida.
+- [x] Coeficientes de granel sólido (Tabela A, lotação) carregados em `packages/pricing/src/tabela-vigente.ts`: Res. ANTT 6.084/2026 com o reajuste da Portaria SUROC 22/2026, em vigor desde 30/09/2026.
+- [ ] Conferir esses coeficientes contra o DOU / ANTTlegis antes do lançamento (foram transcritos da LegisWeb).
+- [ ] Atualizar a tabela a cada nova portaria de reajuste da ANTT. Tipos de carga sem coeficiente carregado respondem `TABELA_PISO_INDISPONIVEL`.
 - [ ] Definir com o cliente o percentual da taxa Fortex (hoje 8%, valor do exemplo do estudo) e o adiantamento padrão.
 - [ ] Escolher a IPEF parceira para a integração de CIOT, adiantamento e saldo.
 - [ ] Parecer jurídico e tributário sobre o enquadramento como intermediadora.

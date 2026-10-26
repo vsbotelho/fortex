@@ -22,7 +22,14 @@ describe('CotacaoService', () => {
     expect(() => new CotacaoService(tabela).cotar({ ...base, frete: 100_000 })).toThrow(UnprocessableEntityException);
   });
 
-  it('fica indisponível enquanto a tabela oficial não for carregada', () => {
-    expect(() => new CotacaoService(TABELA_VIGENTE).cotar(base)).toThrow(ServiceUnavailableException);
+  it('cota com a tabela vigente', () => {
+    const r = new CotacaoService(TABELA_VIGENTE).cotar(base);
+    expect(r.piso.valor).toBe(361_240);
+  });
+
+  it('fica indisponível para tipo de carga sem coeficiente carregado', () => {
+    expect(() => new CotacaoService(TABELA_VIGENTE).cotar({ ...base, tipoCarga: TipoCarga.CARGA_GERAL })).toThrow(
+      ServiceUnavailableException,
+    );
   });
 });
