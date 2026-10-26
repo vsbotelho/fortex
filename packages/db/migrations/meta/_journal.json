@@ -8,6 +8,13 @@
       "when": 1793033462455,
       "tag": "0000_cadastro_inicial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793033850644,
+      "tag": "0001_login_e_auditoria",
+      "breakpoints": true
     }
   ]
 }

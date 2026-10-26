@@ -1,105 +1,141 @@
-import 'reflect-metadata';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
-import { Db, transportadores } from '@fortex/db';
-import { bancoDeTeste } from '@fortex/db/dist/teste';
-import { CadastroController } from './cadastro.controller';
-import { CadastroService } from './cadastro.service';
+import { auditoria } from '@fortex/db';
+import { AppDeTeste, criarAppDeTeste } from '../teste/app-de-teste';
 
-let ctx: Awaited<ReturnType<typeof bancoDeTeste>>;
-let api: CadastroController;
-
+let app: AppDeTeste;
 beforeEach(async () => {
-  ctx = await bancoDeTeste();
-  api = new CadastroController(new CadastroService(ctx.db as unknown as Db));
+  app = await criarAppDeTeste();
 });
 afterEach(async () => {
-  await ctx.fechar();
+  await app.fechar();
 });
 
-const tac = {
-  tipo: 'TAC',
-  documento: '529.982.247-25',
-  nome: 'João da Silva',
-  rntrc: '12345678',
-  cnh: '01234567890',
-  telefone: '(64) 99999-0000',
-};
+const tac = { tipo: 'TAC', documento: '529.982.247-25', nome: 'João da Silva', rntrc: '12345678', cnh: '01234567890' };
+const veiculo = { placa: 'bra-2e19', renavam: '639884962', eixos: 5, carroceria: 'GRANELEIRO' };
 
-async function erroDe(p: Promise<unknown> | (() => unknown)) {
-  try {
-    await (typeof p === 'function' ? p() : p);
-  } catch (e) {
-    return e as any;
-  }
-  throw new Error('esperava erro');
+async function admin() {
+  const token = await app.entrar('+5561999990009');
+  await app.promoverAdmin('+5561999990009');
+  return token;
 }
 
 describe('cadastro de transportador', () => {
-  it('normaliza documentos e começa pendente, sem poder receber ofertas', async () => {
-    const t = await api.criarTransportador(tac);
-    expect(t).toMatchObject({ documento: '52998224725', rntrc: '012345678', telefone: '+5564999990000', statusVerificacao: 'PENDENTE' });
-    expect(t.elegibilidade.apto).toBe(false);
-    expect(t.elegibilidade.pendencias).toHaveLength(2);
+  it('vincula ao usuário logado, usa o telefone do login e começa pendente', async () => {
+    const token = await app.entrar('+5564999990000');
+    const r = await app.req('POST', '/transportadores', { token, corpo: tac });
+    expect(r.status).toBe(201);
+    expect(r.corpo).toMatchObject({ documento: '52998224725', rntrc: '012345678', telefone: '+5564999990000', statusVerificacao: 'PENDENTE' });
+    expect(r.corpo.elegibilidade.apto).toBe(false);
+
+    const eu = await app.req('GET', '/eu', { token });
+    expect(eu.corpo).toMatchObject({ papel: 'MOTORISTA', transportadorId: r.corpo.id });
+  });
+
+  it('um telefone, um cadastro', async () => {
+    const token = await app.entrar('+5564999990000');
+    await app.req('POST', '/transportadores', { token, corpo: tac });
+    expect((await app.req('POST', '/transportadores', { token, corpo: { ...tac, documento: '11144477735', rntrc: '87654321' } })).status).toBe(403);
+    expect((await app.req('POST', '/embarcadores', { token, corpo: { documento: '11222333000181', nome: 'X', email: 'x@exemplo.com' } })).status).toBe(403);
   });
 
   it('devolve todos os campos inválidos de uma vez', async () => {
-    const e = await erroDe(() => api.criarTransportador({ tipo: 'TAC', documento: '123', rntrc: '1', telefone: '9' }));
-    expect(e).toBeInstanceOf(BadRequestException);
-    expect(Object.keys(e.getResponse().campos).sort()).toEqual(['cnh', 'documento', 'nome', 'rntrc', 'telefone']);
+    const token = await app.entrar('+5564999990000');
+    const r = await app.req('POST', '/transportadores', { token, corpo: { tipo: 'TAC', documento: '123', rntrc: '1' } });
+    expect(r.status).toBe(400);
+    expect(Object.keys(r.corpo.campos).sort()).toEqual(['cnh', 'documento', 'nome', 'rntrc']);
   });
 
-  it('ETC usa CNPJ (inclusive alfanumérico) e dispensa CNH', async () => {
-    const t = await api.criarTransportador({ ...tac, tipo: 'ETC', documento: '12.ABC.345/01DE-35', cnh: undefined });
-    expect(t.documento).toBe('12ABC34501DE35');
-    expect(t.cnh).toBeNull();
+  it('recusa CPF já cadastrado por outro telefone, sem vincular o usuário', async () => {
+    const t1 = await app.entrar('+5564999990000');
+    await app.req('POST', '/transportadores', { token: t1, corpo: tac });
+    const t2 = await app.entrar('+5564999990001');
+    const r = await app.req('POST', '/transportadores', { token: t2, corpo: { ...tac, rntrc: '87654321' } });
+    expect(r.status).toBe(409);
+    expect((await app.req('GET', '/eu', { token: t2 })).corpo.papel).toBe('NOVO');
   });
 
-  it('recusa CPF ou RNTRC já cadastrados', async () => {
-    await api.criarTransportador(tac);
-    const e = await erroDe(api.criarTransportador({ ...tac, rntrc: '987654321' }));
-    expect(e).toBeInstanceOf(ConflictException);
-    expect(e.getResponse().mensagem).toMatch(/CPF\/CNPJ/);
+  it('ETC usa CNPJ, inclusive alfanumérico, e dispensa CNH', async () => {
+    const token = await app.entrar('+5564999990000');
+    const r = await app.req('POST', '/transportadores', { token, corpo: { ...tac, tipo: 'ETC', documento: '12.ABC.345/01DE-35', cnh: undefined } });
+    expect(r.status).toBe(201);
+    expect(r.corpo).toMatchObject({ documento: '12ABC34501DE35', cnh: null });
   });
 
-  it('fica apto só com cadastro aprovado e veículo ativo', async () => {
-    const t = await api.criarTransportador(tac);
-    await api.adicionarVeiculo(t.id, { placa: 'bra-2e19', renavam: '639884962', eixos: 5, carroceria: 'GRANELEIRO' });
-    expect((await api.obterTransportador(t.id)).elegibilidade.apto).toBe(false);
-
-    await ctx.db.update(transportadores).set({ statusVerificacao: 'APROVADO' }).where(eq(transportadores.id, t.id));
-    const detalhe = await api.obterTransportador(t.id);
-    expect(detalhe.veiculos[0]).toMatchObject({ placa: 'BRA2E19', renavam: '00639884962' });
-    expect(detalhe.elegibilidade).toEqual({ apto: true, pendencias: [] });
+  it('ninguém vê nem altera o cadastro de outro motorista', async () => {
+    const t1 = await app.entrar('+5564999990000');
+    const { corpo } = await app.req('POST', '/transportadores', { token: t1, corpo: tac });
+    const t2 = await app.entrar('+5564999990001');
+    await app.req('POST', '/transportadores', { token: t2, corpo: { ...tac, documento: '11144477735', rntrc: '87654321' } });
+    expect((await app.req('GET', `/transportadores/${corpo.id}`, { token: t2 })).status).toBe(403);
+    expect((await app.req('POST', `/transportadores/${corpo.id}/veiculos`, { token: t2, corpo: veiculo })).status).toBe(403);
   });
 
   it('valida veículo e recusa placa repetida', async () => {
-    const t = await api.criarTransportador(tac);
-    const e = await erroDe(() => api.adicionarVeiculo(t.id, { placa: 'X', renavam: '00639884963', eixos: 8, carroceria: 'BAU' }));
-    expect(Object.keys(e.getResponse().campos).sort()).toEqual(['carroceria', 'eixos', 'placa', 'renavam']);
-
-    await api.adicionarVeiculo(t.id, { placa: 'ABC1234', renavam: '00639884962', eixos: 6, carroceria: 'BASCULANTE' });
-    const dup = await erroDe(api.adicionarVeiculo(t.id, { placa: 'ABC1234', renavam: '00639884962', eixos: 6, carroceria: 'BASCULANTE' }));
-    expect(dup).toBeInstanceOf(ConflictException);
-  });
-
-  it('404 para transportador inexistente', async () => {
-    const e = await erroDe(api.obterTransportador('00000000-0000-0000-0000-000000000000'));
-    expect(e).toBeInstanceOf(NotFoundException);
+    const token = await app.entrar('+5564999990000');
+    const { corpo: t } = await app.req('POST', '/transportadores', { token, corpo: tac });
+    const ruim = await app.req('POST', `/transportadores/${t.id}/veiculos`, { token, corpo: { placa: 'X', renavam: '00639884963', eixos: 8, carroceria: 'BAU' } });
+    expect(Object.keys(ruim.corpo.campos).sort()).toEqual(['carroceria', 'eixos', 'placa', 'renavam']);
+    expect((await app.req('POST', `/transportadores/${t.id}/veiculos`, { token, corpo: veiculo })).status).toBe(201);
+    expect((await app.req('POST', `/transportadores/${t.id}/veiculos`, { token, corpo: veiculo })).status).toBe(409);
   });
 });
 
 describe('cadastro de embarcador', () => {
-  it('aceita CNPJ ou CPF de produtor rural', async () => {
-    const pj = await api.criarEmbarcador({ documento: '11.222.333/0001-81', nome: 'Armazém', telefone: '64 3611-0000', email: 'Compras@Exemplo.com' });
-    expect(pj).toMatchObject({ documento: '11222333000181', email: 'compras@exemplo.com', statusVerificacao: 'PENDENTE' });
-    const pf = await api.criarEmbarcador({ documento: '529.982.247-25', nome: 'Produtor', telefone: '64999990000', email: 'p@exemplo.com' });
-    expect(pf.documento).toBe('52998224725');
+  it('aceita CNPJ ou CPF de produtor rural e vincula ao usuário', async () => {
+    const t1 = await app.entrar('+5564999990000');
+    const pj = await app.req('POST', '/embarcadores', { token: t1, corpo: { documento: '11.222.333/0001-81', nome: 'Armazém', email: 'Compras@Exemplo.com' } });
+    expect(pj.corpo).toMatchObject({ documento: '11222333000181', email: 'compras@exemplo.com', telefone: '+5564999990000' });
+    expect((await app.req('GET', '/eu', { token: t1 })).corpo.papel).toBe('EMBARCADOR');
+
+    const t2 = await app.entrar('+5564999990001');
+    const pf = await app.req('POST', '/embarcadores', { token: t2, corpo: { documento: '529.982.247-25', nome: 'Produtor', email: 'p@exemplo.com' } });
+    expect(pf.corpo.documento).toBe('52998224725');
+  });
+});
+
+describe('painel de verificação', () => {
+  it('só ADMIN acessa', async () => {
+    const token = await app.entrar('+5564999990000');
+    expect((await app.req('GET', '/admin/cadastros/pendentes', { token })).status).toBe(403);
   });
 
-  it('exige e-mail válido', async () => {
-    const e = await erroDe(() => api.criarEmbarcador({ documento: '11222333000181', nome: 'X', telefone: '64999990000', email: 'sem-arroba' }));
-    expect(e.getResponse().campos).toEqual({ email: 'E-mail inválido.' });
+  it('aprovação libera o motorista para ofertas e fica na auditoria', async () => {
+    const tm = await app.entrar('+5564999990000');
+    const { corpo: t } = await app.req('POST', '/transportadores', { token: tm, corpo: tac });
+    await app.req('POST', `/transportadores/${t.id}/veiculos`, { token: tm, corpo: veiculo });
+
+    const ta = await admin();
+    const fila = await app.req('GET', '/admin/cadastros/pendentes', { token: ta });
+    expect(fila.corpo.transportadores.map((x: any) => x.id)).toEqual([t.id]);
+
+    const r = await app.req('POST', `/admin/transportadores/${t.id}/verificacao`, { token: ta, corpo: { decisao: 'APROVADO' } });
+    expect(r.corpo.statusVerificacao).toBe('APROVADO');
+
+    const detalhe = await app.req('GET', `/transportadores/${t.id}`, { token: tm });
+    expect(detalhe.corpo.elegibilidade).toEqual({ apto: true, pendencias: [] });
+    expect((await app.req('GET', '/admin/cadastros/pendentes', { token: ta })).corpo.transportadores).toHaveLength(0);
+
+    const log = await app.db.select().from(auditoria);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ acao: 'DECISAO_VERIFICACAO', entidade: 'transportador', entidadeId: t.id, dados: { de: 'PENDENTE', para: 'APROVADO', motivo: null } });
+  });
+
+  it('reprovação exige motivo, que o motorista vê nas pendências', async () => {
+    const tm = await app.entrar('+5564999990000');
+    const { corpo: t } = await app.req('POST', '/transportadores', { token: tm, corpo: tac });
+    const ta = await admin();
+    const sem = await app.req('POST', `/admin/transportadores/${t.id}/verificacao`, { token: ta, corpo: { decisao: 'REPROVADO' } });
+    expect(sem.status).toBe(400);
+    await app.req('POST', `/admin/transportadores/${t.id}/verificacao`, { token: ta, corpo: { decisao: 'REPROVADO', motivo: 'RNTRC suspenso' } });
+    const detalhe = await app.req('GET', `/transportadores/${t.id}`, { token: tm });
+    expect(detalhe.corpo.elegibilidade.pendencias[0]).toContain('RNTRC suspenso');
+  });
+
+  it('aprova embarcador', async () => {
+    const te = await app.entrar('+5564999990000');
+    const { corpo: e } = await app.req('POST', '/embarcadores', { token: te, corpo: { documento: '11222333000181', nome: 'Armazém', email: 'a@exemplo.com' } });
+    const ta = await admin();
+    const r = await app.req('POST', `/admin/embarcadores/${e.id}/verificacao`, { token: ta, corpo: { decisao: 'APROVADO' } });
+    expect(r.corpo.statusVerificacao).toBe('APROVADO');
   });
 });

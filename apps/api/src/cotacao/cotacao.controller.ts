@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { TipoCarga } from '@fortex/pricing';
 import { CotacaoService, PedidoCotacao } from './cotacao.service';
+import { Publico } from '../auth/decoradores';
 
 function exigirNumero(v: unknown, campo: string, opcional = false): number | undefined {
   if (v === undefined && opcional) return undefined;
@@ -18,6 +19,8 @@ function exigirCentavos(v: unknown, campo: string, opcional = false): number | u
   return n;
 }
 
+/** Simulador público: o piso ANTT é informação pública. Publicar frete exigirá login. */
+@Publico()
 @Controller('cotacoes')
 export class CotacaoController {
   constructor(private readonly service: CotacaoService) {}

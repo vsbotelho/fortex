@@ -38,22 +38,40 @@ cd apps/mobile && pnpm dev   # app do motorista no Expo
 
 ## API
 
-| Rota | O que faz |
-|---|---|
-| `POST /cotacoes` | Piso ANTT, preço sugerido e cotação; recusa frete abaixo do piso |
-| `POST /transportadores` | Cadastra TAC (CPF + CNH) ou ETC (CNPJ), com RNTRC; começa `PENDENTE` |
-| `GET /transportadores/:id` | Dados, veículos e elegibilidade para receber ofertas |
-| `POST /transportadores/:id/veiculos` | Placa, RENAVAM, eixos (2–7 ou 9) e carroceria (graneleiro ou basculante) |
-| `POST /embarcadores` | Cadastra embarcador por CNPJ ou CPF de produtor rural |
-| `GET /embarcadores/:id` | Dados do embarcador |
+Toda rota exige login (`Authorization: Bearer <token>`), salvo as marcadas como públicas.
+
+| Rota | Quem | O que faz |
+|---|---|---|
+| `GET /health` | público | Situação da API |
+| `POST /cotacoes` | público | Simulador: piso ANTT, preço sugerido e cotação; recusa frete abaixo do piso |
+| `POST /auth/codigo` | público | Envia código de 6 dígitos para o celular |
+| `POST /auth/entrar` | público | Troca telefone + código por um token de sessão (30 dias) |
+| `POST /auth/sair` | logado | Revoga o token |
+| `GET /eu` | logado | Usuário, papel e vínculo |
+| `POST /transportadores` | NOVO | Cadastra TAC (CPF + CNH) ou ETC (CNPJ) com RNTRC e vira MOTORISTA |
+| `GET /transportadores/:id` | dono ou ADMIN | Dados, veículos e elegibilidade para receber ofertas |
+| `POST /transportadores/:id/veiculos` | dono ou ADMIN | Placa, RENAVAM, eixos (2–7 ou 9) e carroceria |
+| `POST /embarcadores` | NOVO | Cadastra por CNPJ ou CPF de produtor rural e vira EMBARCADOR |
+| `GET /embarcadores/:id` | dono ou ADMIN | Dados do embarcador |
+| `GET /admin/cadastros/pendentes` | ADMIN | Fila de verificação |
+| `POST /admin/transportadores/:id/verificacao` | ADMIN | `EM_ANALISE`, `APROVADO` ou `REPROVADO` (motivo obrigatório) |
+| `POST /admin/embarcadores/:id/verificacao` | ADMIN | Idem, para embarcador |
+
+Regras do login: código vale 10 minutos e uma vez só; 5 tentativas por código; até 3 códigos por telefone a cada 15 minutos; o banco guarda só o HMAC do código e o hash do token. O telefone do login é o telefone do cadastro, e cada telefone tem um cadastro só. Decisões do painel ficam na tabela `auditoria`.
 
 O transportador só recebe ofertas com verificação `APROVADO` e ao menos um veículo ativo.
 
-## Pendências do cadastro
+Para criar o primeiro administrador: entre uma vez com o telefone e rode `DATABASE_URL=... pnpm --filter @fortex/api admin:promover +55DDDNUMERO`.
 
-- [ ] Autenticação (login por telefone com código) — as rotas ainda estão abertas; não expor fora do ambiente local.
+Em desenvolvimento o código de acesso aparece no console da API. Em produção a API não sobe sem `AUTH_SECRET` (32+ caracteres) e sem um provedor de SMS/WhatsApp.
+
+## Pendências do cadastro e do login
+
+- [ ] Escolher o provedor de SMS/WhatsApp e implementar o `EnviadorCodigo` real.
+- [ ] Limite de requisições por IP (no proxy ou com `@nestjs/throttler`) antes de expor a API.
 - [ ] Verificação na fonte: RNTRC na ANTT, CNH no SENATRAN, CPF/CNPJ na Receita, prova de vida. Hoje a validação é só de formato e dígito verificador.
-- [ ] Painel de aprovação manual de cadastros (com motivo obrigatório na reprovação, já garantido pelo banco).
+- [ ] Telas do painel administrativo e de login no app e na web (a API já está pronta).
+- [ ] Motoristas vinculados a uma ETC (hoje cada ETC tem um usuário).
 - [ ] Seguros obrigatórios do transportador (RCTR-C) e documentos em anexo.
 
 ## Pendências antes de cotar de verdade
