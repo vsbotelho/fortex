@@ -1,0 +1,22 @@
+{
+  "name": "fortex",
+  "private": true,
+  "description": "Fortex — intermediadora digital de fretes rodoviários",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  }
+}

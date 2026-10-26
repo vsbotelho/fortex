@@ -1,0 +1,44 @@
+:root {
+  --fundo: #f4f6f3;
+  --superficie: #ffffff;
+  --texto: #15201a;
+  --texto-suave: #55625a;
+  --linha: #dde3de;
+  --verde: #1e6b43;
+  --verde-escuro: #14502f;
+  --erro-fundo: #fbe9e5;
+  --erro-texto: #7a2414;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fundo); color: var(--texto); font-family: system-ui, sans-serif; }
+
+.topo { background: var(--texto); color: #fff; }
+.topo-conteudo { max-width: 1200px; margin: 0 auto; padding: 0 24px; min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.marca { font-weight: 700; font-size: 24px; letter-spacing: 0.5px; }
+.topo nav a { color: #fff; text-decoration: none; font-weight: 600; padding: 12px 14px; display: inline-block; border-bottom: 3px solid #2e8b57; }
+
+main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 48px; }
+h1 { margin: 0 0 6px; font-size: 32px; }
+.sub { margin: 0 0 24px; color: var(--texto-suave); }
+
+.grade { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.cartao { background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px; padding: 24px; }
+.formulario { flex: 999 1 560px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.resumo { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 14px; font-weight: 600; }
+.campo input, .campo select { min-height: 44px; border: 1px solid #c9d2cc; border-radius: 8px; padding: 0 12px; font-size: 16px; background: #fff; }
+
+.linha { display: flex; justify-content: space-between; gap: 12px; }
+.linha .rotulo { color: var(--texto-suave); }
+.total { font-size: 22px; font-weight: 700; }
+.taxa { background: var(--fundo); border-radius: 10px; padding: 12px; }
+.nota { font-size: 13px; color: var(--texto-suave); }
+
+.erro { background: var(--erro-fundo); color: var(--erro-texto); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+
+button { min-height: 48px; border-radius: 10px; border: 0; background: var(--verde); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+button:disabled { background: #a9c2b3; color: var(--texto); cursor: not-allowed; }
+button.secundario { background: #fff; color: var(--verde-escuro); border: 1px solid var(--verde); }
