@@ -14,7 +14,9 @@ Intermediadora digital de fretes rodoviários. O contrato de transporte é firma
 | Pasta | O que é |
 |---|---|
 | `packages/pricing` | Motor de preço: piso ANTT, preço sugerido, bloqueio abaixo do piso e composição da cotação |
-| `apps/api` | Back-end NestJS. Hoje expõe `POST /cotacoes` e `GET /health` |
+| `packages/validacao` | Validação local de CPF, CNPJ (inclusive alfanumérico), CNH, RENAVAM, placa e RNTRC |
+| `packages/db` | Esquema do banco (Drizzle + PostgreSQL), migrações SQL e banco em memória para testes |
+| `apps/api` | Back-end NestJS: cotação, cadastro de transportadores, veículos e embarcadores |
 | `apps/web` | Web do embarcador (Next.js). Hoje tem a tela de publicar carga e cotação |
 | `apps/mobile` | App do motorista (React Native com Expo). Hoje lista ofertas de exemplo |
 
@@ -28,10 +30,31 @@ Requisitos: Node 22+, pnpm 10, Docker (para o banco).
 pnpm install
 cp .env.example .env
 pnpm db:up          # PostgreSQL 16 com PostGIS
-pnpm test           # testes do motor de preço e da API
+pnpm --filter @fortex/db build && DATABASE_URL=postgresql://fortex:fortex@localhost:5432/fortex pnpm --filter @fortex/db db:migrate
+pnpm test           # testes (usam PostgreSQL em memória, sem Docker)
 pnpm dev            # api em :3001, web em :3000
 cd apps/mobile && pnpm dev   # app do motorista no Expo
 ```
+
+## API
+
+| Rota | O que faz |
+|---|---|
+| `POST /cotacoes` | Piso ANTT, preço sugerido e cotação; recusa frete abaixo do piso |
+| `POST /transportadores` | Cadastra TAC (CPF + CNH) ou ETC (CNPJ), com RNTRC; começa `PENDENTE` |
+| `GET /transportadores/:id` | Dados, veículos e elegibilidade para receber ofertas |
+| `POST /transportadores/:id/veiculos` | Placa, RENAVAM, eixos (2–7 ou 9) e carroceria (graneleiro ou basculante) |
+| `POST /embarcadores` | Cadastra embarcador por CNPJ ou CPF de produtor rural |
+| `GET /embarcadores/:id` | Dados do embarcador |
+
+O transportador só recebe ofertas com verificação `APROVADO` e ao menos um veículo ativo.
+
+## Pendências do cadastro
+
+- [ ] Autenticação (login por telefone com código) — as rotas ainda estão abertas; não expor fora do ambiente local.
+- [ ] Verificação na fonte: RNTRC na ANTT, CNH no SENATRAN, CPF/CNPJ na Receita, prova de vida. Hoje a validação é só de formato e dígito verificador.
+- [ ] Painel de aprovação manual de cadastros (com motivo obrigatório na reprovação, já garantido pelo banco).
+- [ ] Seguros obrigatórios do transportador (RCTR-C) e documentos em anexo.
 
 ## Pendências antes de cotar de verdade
 

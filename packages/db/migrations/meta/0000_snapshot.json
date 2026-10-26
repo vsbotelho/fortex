@@ -1,0 +1,350 @@
+{
+  "id": "c01e8162-99a9-4677-91ee-10b025c53521",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.embarcadores": {
+      "name": "embarcadores",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "documento": {
+          "name": "documento",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telefone": {
+          "name": "telefone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status_verificacao": {
+          "name": "status_verificacao",
+          "type": "status_verificacao",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDENTE'"
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "embarcadores_documento_unique": {
+          "name": "embarcadores_documento_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "documento"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.transportadores": {
+      "name": "transportadores",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "tipo_transportador",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "documento": {
+          "name": "documento",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rntrc": {
+          "name": "rntrc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cnh": {
+          "name": "cnh",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telefone": {
+          "name": "telefone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_verificacao": {
+          "name": "status_verificacao",
+          "type": "status_verificacao",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDENTE'"
+        },
+        "motivo_reprovacao": {
+          "name": "motivo_reprovacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "atualizado_em": {
+          "name": "atualizado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "transportadores_documento_unique": {
+          "name": "transportadores_documento_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "documento"
+          ]
+        },
+        "transportadores_rntrc_unique": {
+          "name": "transportadores_rntrc_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "rntrc"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "tac_exige_cnh": {
+          "name": "tac_exige_cnh",
+          "value": "\"transportadores\".\"tipo\" <> 'TAC' OR \"transportadores\".\"cnh\" IS NOT NULL"
+        },
+        "reprovado_exige_motivo": {
+          "name": "reprovado_exige_motivo",
+          "value": "\"transportadores\".\"status_verificacao\" <> 'REPROVADO' OR \"transportadores\".\"motivo_reprovacao\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.veiculos": {
+      "name": "veiculos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "transportador_id": {
+          "name": "transportador_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "placa": {
+          "name": "placa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "renavam": {
+          "name": "renavam",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eixos": {
+          "name": "eixos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "carroceria": {
+          "name": "carroceria",
+          "type": "carroceria",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ativo": {
+          "name": "ativo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "veiculos_transportador_idx": {
+          "name": "veiculos_transportador_idx",
+          "columns": [
+            {
+              "expression": "transportador_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "veiculos_transportador_id_transportadores_id_fk": {
+          "name": "veiculos_transportador_id_transportadores_id_fk",
+          "tableFrom": "veiculos",
+          "tableTo": "transportadores",
+          "columnsFrom": [
+            "transportador_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "veiculos_placa_unique": {
+          "name": "veiculos_placa_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "placa"
+          ]
+        },
+        "veiculos_renavam_unique": {
+          "name": "veiculos_renavam_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "renavam"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "eixos_validos": {
+          "name": "eixos_validos",
+          "value": "\"veiculos\".\"eixos\" IN (2, 3, 4, 5, 6, 7, 9)"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.carroceria": {
+      "name": "carroceria",
+      "schema": "public",
+      "values": [
+        "GRANELEIRO",
+        "BASCULANTE"
+      ]
+    },
+    "public.status_verificacao": {
+      "name": "status_verificacao",
+      "schema": "public",
+      "values": [
+        "PENDENTE",
+        "EM_ANALISE",
+        "APROVADO",
+        "REPROVADO"
+      ]
+    },
+    "public.tipo_transportador": {
+      "name": "tipo_transportador",
+      "schema": "public",
+      "values": [
+        "TAC",
+        "ETC"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
