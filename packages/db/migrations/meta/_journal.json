@@ -15,6 +15,13 @@
       "when": 1793033850644,
       "tag": "0001_login_e_auditoria",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795139785243,
+      "tag": "0002_fretes",
+      "breakpoints": true
     }
   ]
 }

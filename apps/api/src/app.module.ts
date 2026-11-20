@@ -13,15 +13,21 @@ import { AuthService } from './auth/auth.service';
 import { AuthGuard } from './auth/auth.guard';
 import { AUTH_CONFIG, configDoAmbiente, ENVIADOR_CODIGO, EnviadorConsole, RELOGIO } from './auth/config';
 import { DbModule } from './db/db.module';
+import { FretesController } from './fretes/fretes.controller';
+import { FretesService } from './fretes/fretes.service';
+import { NOTIFICADOR_FRETES, NotificadorConsole } from './fretes/notificador';
 
-export const CONTROLADORES = [HealthController, AuthController, CotacaoController, CadastroController, AdminController];
+export const CONTROLADORES = [HealthController, AuthController, CotacaoController, CadastroController, AdminController, FretesController];
 
 /** Provedores da aplicação. Os testes substituem DB, envio de código e relógio. */
 export const PROVEDORES: Provider[] = [
   CotacaoService,
   CadastroService,
   AuthService,
+  FretesService,
   { provide: APP_GUARD, useClass: AuthGuard },
+  // PENDENTE: push no app e WhatsApp.
+  { provide: NOTIFICADOR_FRETES, useFactory: () => new NotificadorConsole() },
   { provide: TABELA_PISO, useValue: TABELA_VIGENTE },
   { provide: AUTH_CONFIG, useFactory: () => configDoAmbiente() },
   // PENDENTE: trocar pelo provedor de SMS/WhatsApp escolhido.

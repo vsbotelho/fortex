@@ -30,8 +30,9 @@ export interface RespostaCotacao {
   cotacao: Cotacao;
 }
 
-// PENDENTE: definir com o cliente. Valor do exemplo do estudo v0.3.
+// PENDENTE (decisão do gestor): valores do exemplo do estudo v0.3.
 const TAXA_PADRAO: TaxaFortex = { tipo: 'percentual', percentual: 8 };
+export const ADIANTAMENTO_PADRAO_PERCENTUAL = 40;
 
 @Injectable()
 export class CotacaoService {

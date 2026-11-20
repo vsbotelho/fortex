@@ -7,6 +7,44 @@ import { eq } from 'drizzle-orm';
 import { CONTROLADORES, PROVEDORES } from '../app.module';
 import { AUTH_CONFIG, configDoAmbiente, ENVIADOR_CODIGO, EnviadorCodigo, RELOGIO } from '../auth/config';
 import { DB } from '../db/tokens';
+import type { Candidato } from '../fretes/matching';
+import { NOTIFICADOR_FRETES, NotificadorFretes } from '../fretes/notificador';
+import type { Frete } from '@fortex/db';
+
+/** Guarda os avisos que seriam enviados aos motoristas e embarcadores. */
+export class NotificadorFalso implements NotificadorFretes {
+  novos: { freteId: string; candidatos: Candidato[] }[] = [];
+  aceitos: string[] = [];
+  mudancas: { freteId: string; de: string; para: string }[] = [];
+  async novoFrete(f: Frete, candidatos: Candidato[]) {
+    this.novos.push({ freteId: f.id, candidatos });
+  }
+  async freteAceito(f: Frete) {
+    this.aceitos.push(f.id);
+  }
+  async statusAlterado(f: Frete, de: Frete['status']) {
+    this.mudancas.push({ freteId: f.id, de, para: f.status });
+  }
+}
+
+/** CPF válido a partir de um número de 9 dígitos (para dados de teste). */
+export function gerarCpf(base: number): string {
+  const d = String(base).padStart(9, '0').split('').map(Number);
+  for (const peso of [10, 11]) {
+    const soma = d.reduce((s, n, i) => s + n * (peso - i), 0);
+    const r = (soma * 10) % 11;
+    d.push(r === 10 ? 0 : r);
+  }
+  return d.join('');
+}
+
+/** RENAVAM válido a partir de um número de 10 dígitos (para dados de teste). */
+export function gerarRenavam(base: number): string {
+  const d = String(base).padStart(10, '0').split('').map(Number);
+  const pesos = [3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const r = (d.reduce((s, n, i) => s + n * pesos[i], 0) * 10) % 11;
+  return d.join('') + (r === 10 ? 0 : r);
+}
 
 /** Captura os códigos que seriam enviados por SMS/WhatsApp. */
 export class EnviadorFalso implements EnviadorCodigo {
@@ -20,6 +58,7 @@ export interface AppDeTeste {
   url: string;
   db: Db;
   enviador: EnviadorFalso;
+  notificador: NotificadorFalso;
   /** Avança o relógio da aplicação. */
   avancar(ms: number): void;
   /** Faz login pelo fluxo real e devolve o token. */
@@ -29,12 +68,13 @@ export interface AppDeTeste {
   fechar(): Promise<void>;
 }
 
-const SUBSTITUIDOS = new Set<unknown>([AUTH_CONFIG, ENVIADOR_CODIGO, RELOGIO]);
+const SUBSTITUIDOS = new Set<unknown>([AUTH_CONFIG, ENVIADOR_CODIGO, RELOGIO, NOTIFICADOR_FRETES]);
 
 export async function criarAppDeTeste(): Promise<AppDeTeste> {
   const banco = await bancoDeTeste();
   const db = banco.db as unknown as Db;
   const enviador = new EnviadorFalso();
+  const notificador = new NotificadorFalso();
   let deslocamento = 0;
 
   @Module({
@@ -44,6 +84,7 @@ export async function criarAppDeTeste(): Promise<AppDeTeste> {
       { provide: DB, useValue: db },
       { provide: AUTH_CONFIG, useValue: configDoAmbiente({}) },
       { provide: ENVIADOR_CODIGO, useValue: enviador },
+      { provide: NOTIFICADOR_FRETES, useValue: notificador },
       { provide: RELOGIO, useValue: () => new Date(Date.now() + deslocamento) },
     ],
   })
@@ -79,6 +120,7 @@ export async function criarAppDeTeste(): Promise<AppDeTeste> {
     url,
     db,
     enviador,
+    notificador,
     avancar: (ms) => {
       deslocamento += ms;
     },

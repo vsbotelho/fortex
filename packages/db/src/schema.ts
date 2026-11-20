@@ -1,5 +1,19 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 export const tipoTransportador = pgEnum('tipo_transportador', ['TAC', 'ETC']);
 
@@ -152,6 +166,140 @@ export const auditoria = pgTable(
   },
   (t) => [index('auditoria_entidade_idx').on(t.entidade, t.entidadeId)],
 );
+
+/**
+ * Ciclo do frete. PUBLICADO → ACEITO → EM_COLETA (chegou para carregar) →
+ * EM_TRANSITO (coleta confirmada) → ENTREGUE. CANCELADO a partir de
+ * PUBLICADO, ACEITO ou EM_COLETA (ex.: carga divergente). Se o motorista
+ * desiste antes da coleta, o frete volta a PUBLICADO.
+ */
+export const statusFrete = pgEnum('status_frete', ['PUBLICADO', 'ACEITO', 'EM_COLETA', 'EM_TRANSITO', 'ENTREGUE', 'CANCELADO']);
+
+/** Mesmos valores do enum TipoCarga do motor de preço. O MVP usa GRANEL_SOLIDO. */
+export const tipoCarga = pgEnum('tipo_carga', [
+  'GRANEL_SOLIDO',
+  'GRANEL_LIQUIDO',
+  'FRIGORIFICADA',
+  'CONTEINERIZADA',
+  'CARGA_GERAL',
+  'NEOGRANEL',
+  'GRANEL_PRESSURIZADA',
+]);
+
+const lat = (nome: string) => doublePrecision(nome).notNull();
+
+/**
+ * Frete publicado por um embarcador. Guarda a cotação congelada no momento da
+ * publicação (piso, norma, frete, adiantamento, Vale-Pedágio e taxa), para
+ * que um reajuste posterior da ANTT não altere um frete já ofertado.
+ * Valores em centavos.
+ */
+export const fretes = pgTable(
+  'fretes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    embarcadorId: uuid('embarcador_id')
+      .notNull()
+      .references(() => embarcadores.id, { onDelete: 'restrict' }),
+
+    origemNome: text('origem_nome').notNull(),
+    origemLat: lat('origem_lat'),
+    origemLng: lat('origem_lng'),
+    destinoNome: text('destino_nome').notNull(),
+    destinoLat: lat('destino_lat'),
+    destinoLng: lat('destino_lng'),
+    /** Distância rodoviária informada, base do piso. */
+    distanciaKm: numeric('distancia_km', { precision: 8, scale: 1, mode: 'number' }).notNull(),
+
+    tipoCarga: tipoCarga('tipo_carga').notNull(),
+    produto: text('produto').notNull(),
+    pesoKg: integer('peso_kg').notNull(),
+    eixos: integer('eixos').notNull(),
+    carroceria: carroceria('carroceria').notNull(),
+    coletaInicio: timestamp('coleta_inicio', { withTimezone: true }).notNull(),
+    coletaFim: timestamp('coleta_fim', { withTimezone: true }).notNull(),
+    observacoes: text('observacoes'),
+
+    pisoCentavos: integer('piso_centavos').notNull(),
+    normaPiso: text('norma_piso').notNull(),
+    freteCentavos: integer('frete_centavos').notNull(),
+    adiantamentoPercentual: integer('adiantamento_percentual').notNull(),
+    adiantamentoCentavos: integer('adiantamento_centavos').notNull(),
+    saldoCentavos: integer('saldo_centavos').notNull(),
+    valePedagioCentavos: integer('vale_pedagio_centavos').notNull(),
+    taxaFortexCentavos: integer('taxa_fortex_centavos').notNull(),
+
+    status: statusFrete('status').notNull().default('PUBLICADO'),
+    transportadorId: uuid('transportador_id').references(() => transportadores.id, { onDelete: 'restrict' }),
+    veiculoId: uuid('veiculo_id').references(() => veiculos.id, { onDelete: 'restrict' }),
+    aceitoEm: timestamp('aceito_em', { withTimezone: true }),
+    motivoCancelamento: text('motivo_cancelamento'),
+
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+  },
+  (t) => [
+    // Lei 15.485/2026: nada abaixo do piso, nem por erro de aplicação.
+    check('frete_no_piso', sql`${t.freteCentavos} >= ${t.pisoCentavos} AND ${t.pisoCentavos} > 0`),
+    // Lei 11.442, art. 13-B: o transportador recebe o frete inteiro.
+    check('frete_integral', sql`${t.adiantamentoCentavos} + ${t.saldoCentavos} = ${t.freteCentavos}`),
+    check('adiantamento_valido', sql`${t.adiantamentoPercentual} BETWEEN 0 AND 100`),
+    check('frete_eixos_validos', sql`${t.eixos} IN (2, 3, 4, 5, 6, 7, 9)`),
+    check('peso_positivo', sql`${t.pesoKg} > 0`),
+    check('distancia_positiva', sql`${t.distanciaKm} > 0`),
+    check('janela_coleta', sql`${t.coletaFim} > ${t.coletaInicio}`),
+    check(
+      'aceite_tem_motorista',
+      sql`${t.status} IN ('PUBLICADO', 'CANCELADO') OR (${t.transportadorId} IS NOT NULL AND ${t.veiculoId} IS NOT NULL AND ${t.aceitoEm} IS NOT NULL)`,
+    ),
+    check('cancelado_exige_motivo', sql`${t.status} <> 'CANCELADO' OR ${t.motivoCancelamento} IS NOT NULL`),
+    index('fretes_status_idx').on(t.status, t.coletaInicio),
+    index('fretes_embarcador_idx').on(t.embarcadorId),
+    // Um motorista com um frete em andamento por vez.
+    uniqueIndex('um_frete_ativo_por_transportador')
+      .on(t.transportadorId)
+      .where(sql`${t.status} IN ('ACEITO', 'EM_COLETA', 'EM_TRANSITO')`),
+  ],
+);
+
+/** Linha do tempo do frete: cada mudança de status, com quem e quando. Só inserção. */
+export const freteEventos = pgTable(
+  'frete_eventos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    freteId: uuid('frete_id')
+      .notNull()
+      .references(() => fretes.id, { onDelete: 'cascade' }),
+    de: statusFrete('de'),
+    para: statusFrete('para').notNull(),
+    usuarioId: uuid('usuario_id').references(() => usuarios.id, { onDelete: 'set null' }),
+    dados: jsonb('dados'),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index('frete_eventos_frete_idx').on(t.freteId, t.criadoEm)],
+);
+
+/**
+ * Onde o motorista está e para onde quer ir. Base do matching e do bônus de
+ * retorno. Atualizada pelo app; vale por algumas horas.
+ */
+export const disponibilidades = pgTable('disponibilidades', {
+  transportadorId: uuid('transportador_id')
+    .primaryKey()
+    .references(() => transportadores.id, { onDelete: 'cascade' }),
+  disponivel: boolean('disponivel').notNull(),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  destinoNome: text('destino_nome'),
+  destinoLat: doublePrecision('destino_lat'),
+  destinoLng: doublePrecision('destino_lng'),
+  atualizadoEm: atualizadoEm(),
+});
+
+export type Frete = typeof fretes.$inferSelect;
+export type NovoFrete = typeof fretes.$inferInsert;
+export type StatusFrete = Frete['status'];
+export type Disponibilidade = typeof disponibilidades.$inferSelect;
 
 export type Usuario = typeof usuarios.$inferSelect;
 export type PapelUsuario = Usuario['papel'];
